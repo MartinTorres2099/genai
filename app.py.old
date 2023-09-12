@@ -1,0 +1,70 @@
+from dotenv import load_dotenv
+import streamlit as st
+from PyPDF2 import PdfReader
+# import os
+from langchain.text_splitter import CharacterTextSplitter
+# from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores import FAISS
+# Accessing local privateGPT
+# from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.embeddings.openai import OpenAIClient
+
+# Replace 'openai' with the path to your local PrivateGPT model
+client = OpenAIClient(model_path='D:\git\privateGPT\models\ggml-vic13b-q5_1')
+
+# Use the client instance to make API calls to your local PrivateGPT model
+
+embeddings = client.get(
+    endpoint='D:\git\privateGPT\embeddings',
+    data={
+        'input_ids': [12345],
+        'attention_mask': [1, 1, 1, 1, 1],
+        'token_type_ids': [1, 2, 3, 4, 5],
+    },
+)
+
+def main():
+    load_dotenv()
+    # print(os.getenv("OPENAI_API_KEY"))
+    st.set_page_config(page_title="Documents of Justice")
+    st.header("PDF Parser Program")
+
+    # Upload file
+    pdf = st.file_uploader("Upload your PDF", type="pdf")
+
+    # Extract the text
+    if pdf is not None:
+        pdf_reader = PdfReader(pdf)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text()
+
+        # Split into chunks
+        text_splitter = CharacterTextSplitter(
+            separator = "\n",
+            chunk_size = 1000,
+            chunk_overlap = 200,
+            length_function = len
+        )
+        chunks = text_splitter.split_text(text)
+        # st.write(chunks)
+        # st.write(text)
+
+        # Create embeddings
+        embeddings = OpenAIEmbeddings()
+        knowledgbe_base = FAISS.from_texts(chunks, embeddings)
+
+        # Show user input
+        user_question = st.text_input("Search for records - input Name and officer or date:")
+        if user_question:
+            docs = knowledgbe_base.similarity_search(user_question)
+            st.write(docs)
+
+                
+
+
+
+
+
+if __name__== '__main__':
+    main()

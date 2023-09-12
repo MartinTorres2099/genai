@@ -1,0 +1,566 @@
+py
+
+app.py
+3.37 KB
+
+Using langchain, I have a web interface that allows you to drop a pdf file into it and ask questions on it. I need to separate it into 2 apps - one to ingest multiple pdf files and one app to ask questions on the ingested pdf files. How could I go about doing that?
+MC
+
+Here is one way to separate your PDF question answering app into two Streamlit apps - one for ingesting PDFs and one for asking questions:
+
+    Create an ingest_app.py that handles ingesting PDFs into a database. It could look something like:
+
+python
+
+Copy code
+import streamlit as st
+from pymongo import MongoClient
+
+client = MongoClient()
+db = client.pdf_db
+
+st.title("PDF Ingestor")
+
+pdf = st.file_uploader("Upload a PDF")
+if pdf:
+    pdf_text = extract_text(pdf) 
+    db.pdfs.insert_one({
+        "pdf_text": pdf_text 
+    })
+
+    st.success("PDF uploaded!")
+
+This inserts the extracted text from each PDF into a MongoDB database.
+
+    Create a query_app.py that loads the PDF texts and allows asking questions:
+
+python
+
+Copy code
+import streamlit as st
+from pymongo import MongoClient
+from langchain.chains import load_qa_chain
+
+client = MongoClient() 
+db = client.pdf_db
+
+chain = load_qa_chain(...) 
+
+st.title("Ask Questions")
+
+question = st.text_input("Enter your question")
+if question:
+    pdf_texts = list(db.pdfs.find({}, {"pdf_text": 1}))
+    
+    docs = [doc["pdf_text"] for doc in pdf_texts]
+    response = chain.run(docs, question)
+
+    st.write(response)
+
+This loads the PDF texts from the database and uses them to answer the question.
+
+The key points are:
+
+    Separate ingestion and querying into two apps
+    Store ingested PDF text in a database
+    Load texts from database when querying
+
+This allows you to scale the ingestion and querying independently while persisting the PDF texts. Let me know if you have any other questions!
+py
+
+ingest_app.py
+0.31 KB
+
+In this app, I need to save the file to a location based on one of the header values in the PDF. I want to save the file to a speech, script or text folder based on a keyword in the header. How would this code be updated?
+MC
+
+Here is one way to update the ingest app to save the PDFs into different folders based on a keyword in the header:
+
+    Extract the text from the PDF when uploaded:
+
+python
+
+Copy code
+if pdf:
+  pdf_text = extract_text(pdf)
+
+    Analyze the header to look for a keyword:
+
+python
+
+Copy code
+header = pdf_text.split('\n')[0] 
+
+if 'speech' in header:
+  folder = 'speeches'
+elif 'script' in header:
+  folder = 'scripts'  
+elif 'text' in header:
+  folder = 'texts'
+else:
+  folder = 'other'
+
+    Construct the full path to save the PDF to:
+
+python
+
+Copy code
+import os
+
+# Root folder
+save_folder = 'pdf_files' 
+
+# Full path 
+full_path = os.path.join(save_folder, folder, pdf.name)
+
+    Save the PDF to this path:
+
+python
+
+Copy code
+with open(full_path, 'wb') as f:
+  f.write(pdf.read()) 
+
+st.success('PDF saved to {}'.format(full_path))
+
+    Update the database record with the folder path:
+
+python
+
+Copy code
+db.pdfs.insert_one({
+  "pdf_text": pdf_text,
+  "folder_path": full_path
+})
+
+The key steps are:
+
+    Analyze header to determine folder
+    Construct full save path using folder
+    Save PDF to computed path
+    Store full path in database
+
+This allows you to organize the uploaded PDFs into different folders based on keywords in the header. Let me know if you have any other questions!
+py
+
+ingest_app_test.py
+0.83 KB
+
+The attached file is not working. How can I fix it?
+MC
+
+There are a few issues with the attached ingest_app_test.py file:
+
+    extract_text() is undefined. You'll need to import/define a function to extract text from the PDF. You can use PyPDF2 or textract for this.
+    full_path is defined outside of the if statement, so it will error out as folder is not defined yet. Move it inside:
+
+python
+
+Copy code
+if pdf:
+
+  # Extract text
+  pdf_text = extract_text(pdf)
+
+  # Determine folder
+  if 'speech' in header:
+    folder = 'speeches' 
+  # etc..
+
+  # Construct full path
+  full_path = os.path.join(save_folder, folder, pdf.name)
+  
+  # Save PDF
+  with open(full_path, 'wb') as f:
+    f.write(pdf.read())
+
+  # Database insert
+  db.pdfs.insert_one(...)
+
+    The second insert statement that saves the full path will fail, as full_path is only defined in the if statement. You can move it out:
+
+python
+
+Copy code
+full_path = None
+if pdf:
+  
+  # Set full_path
+  full_path = ...
+
+# Insert with full_path
+db.pdfs.insert_one({
+  "pdf_text": pdf_text,
+  "folder_path": full_path
+})
+
+    Check that save_folder exists before writing.
+
+So in summary:
+
+    Import/define extract_text()
+    Move full_path definition into if statement
+    Save full_path outside if statement for second insert
+    Check for folder existence before saving
+
+This should fix the runtime issues. Let me know if you have any other questions!
+py
+
+ingest_app_test.py
+0.83 KB
+
+This is the updated code. It still throws errors.
+MC
+
+There are still a few issues in the updated code:
+
+    extract_text() is still undefined. You need to import and call a PDF text extraction function:
+
+python
+
+Copy code
+from tika import parser
+
+# Extract text 
+pdf_text = parser.from_file(pdf)['content']
+
+    header is not defined before checking it. You need to extract the header first:
+
+python
+
+Copy code
+header = pdf_text.split('\n')[0]
+
+    The file path is being constructed before folder is defined. Move it after folder assignment:
+
+python
+
+Copy code
+if 'speech' in header:
+   folder = 'speeches'
+
+full_path = os.path.join(save_folder, folder, pdf.name)
+
+    Check if save folder exists before writing:
+
+python
+
+Copy code
+if not os.path.exists(save_folder):
+  os.makedirs(save_folder)
+
+with open(full_path, 'wb') as f:
+  f.write(pdf.read())
+
+So the fixed code would be:
+
+python
+
+Copy code
+from tika import parser
+import os
+
+# Extract text
+pdf_text = parser.from_file(pdf)['content']
+
+header = pdf_text.split('\n')[0]
+
+if 'speech' in header:
+  folder = 'speeches'
+
+full_path = os.path.join(save_folder, folder, pdf.name)
+
+if not os.path.exists(save_folder):
+  os.makedirs(save_folder)  
+
+with open(full_path, 'wb') as f:
+  f.write(pdf.read())
+
+# Insert to db
+db.pdfs.insert_one(...) 
+
+st.success("Saved to " + full_path)
+
+Let me know if this helps explain the issues or if you have any other questions!
+py
+
+ingest_app_test.py
+1.07 KB
+
+It's getting close.
+MC
+
+Let's go through the updated code:
+
+    Good, you imported tika and are extracting text with pdf_text = parser.from_file(pdf)['content']
+    Extracting header looks good
+    full_path assignment moved after folder selection, excellent
+    Checking for save folder before writing, great
+
+The remaining issues:
+
+    pdf_text = extract_text(pdf) is no longer needed since you're using tika
+    The write to full_path is happening twice - you just need it once inside the if pdf: block
+    full_path needs to be initialized inside the if pdf:, otherwise it will be undefined on first run
+
+Here is how I would clean it up:
+
+python
+
+Copy code
+import tika
+import os
+
+if pdf:
+
+  full_path = None
+  
+  pdf_text = parser.from_file(pdf)['content']  
+
+  header = pdf_text.split('\n')[0]
+
+  if 'speech' in header:
+    folder = 'speeches'
+
+  full_path = os.path.join(save_folder, folder, pdf.name)
+
+  if not os.path.exists(save_folder):
+    os.makedirs(save_folder)
+
+  with open(full_path, 'wb') as f:
+    f.write(pdf.read())
+
+  db.pdfs.insert_one({
+    "pdf_text": pdf_text, 
+    "folder_path": full_path
+  })
+
+st.success("Saved to {}".format(full_path))
+
+Let me know if this helps explain the remaining changes! Overall it is looking much better.
+py
+
+ingest_app_test.py
+1.09 KB
+
+Can it be optimized more or does this look good?
+MC
+
+The code is looking much cleaner now! Just a few minor optimization suggestions:
+
+    Since you are importing tika already, no need to also import os just for makedirs. You can use tika for that:
+
+python
+
+Copy code
+from tika import parser, mkdir
+
+    You can avoid the separate header extraction by just checking pdf_text directly:
+
+python
+
+Copy code
+if 'speech' in pdf_text:
+  # folder assignment
+
+    No need to assign full_path = None first, you can directly declare and assign it in the if statement.
+    The db insert can be moved out of the if statement to avoid re-declaring pdf_text.
+
+Here is how I might tweak it:
+
+python
+
+Copy code
+from tika import parser, mkdir
+
+pdf_text = None
+full_path = None
+
+if pdf:
+
+  pdf_text = parser.from_file(pdf)['content']  
+
+  if 'speech' in pdf_text:
+     # folder assignment
+  
+  full_path = os.path.join(...)  
+
+  if not exists(save_folder):
+     mkdir(save_folder)
+  
+  with open(full_path, 'wb') as f:
+     f.write(pdf.read())
+   
+# Insert 
+db.pdfs.insert_one({
+  "pdf_text": pdf_text,
+  "full_path": full_path  
+})
+
+st.success(full_path)
+
+The core logic looks very good though! Just some minor tweaks to declare variables in smallest scope needed and leverage tika for everything.
+
+Let me know if you have any other questions!
+py
+
+ingest_app_test.py
+1.05 KB
+
+I think I have to keep the code for the folders as I'll need to save files based on header info. This looks allot better.
+MC
+
+You're right, keeping the folder logic makes sense based on your requirements. The code is looking really good overall!
+
+A few minor additional notes:
+
+    No need for the separate header extraction now, can directly check pdf_text
+    exists() should be os.path.exists()
+    Extra file write can be removed
+
+Here is how I might finalize it:
+
+python
+
+Copy code
+import tika
+from tika import parser, mkdir
+import os
+
+# Paths
+save_folder = 'pdf_files'
+
+if pdf:
+
+  pdf_text = parser.from_file(pdf)['content']
+
+  if 'speech' in pdf_text:  
+    folder = 'speeches'
+  elif 'script' in pdf_text:
+    folder = 'scripts'
+  elif 'text' in pdf_text:
+    folder = 'texts'
+  else:
+    folder = 'other'  
+
+  full_path = os.path.join(save_folder, folder, pdf.name)
+
+  if not os.path.exists(save_folder):
+     mkdir(save_folder)
+
+  with open(full_path, 'wb') as f:
+     f.write(pdf.read()) 
+
+db.pdfs.insert_one({
+  "pdf_text": pdf_text,
+  "full_path": full_path
+})
+   
+st.success(full_path)
+
+The key points:
+
+    Check pdf_text directly rather than separate header
+    Use os.path.exists for check
+    Single file write
+    Folder logic kept as needed
+
+Let me know if you have any other questions!
+py
+
+ingest_app_test.py
+0.93 KB
+
+How can I put an error message in the code to check if the file already exists in the folder and notify the user?
+MC
+
+To check if a file already exists before writing and notify the user, you can:
+
+    Before writing to the file path, check if it exists:
+
+python
+
+Copy code
+if os.path.exists(full_path):
+  st.error("File already exists!")
+
+    If it exists, show an error message with st.error()
+    Optionally, you could append a number to the end of the filename to avoid overwriting:
+
+python
+
+Copy code
+if os.path.exists(full_path):
+  count = 1
+  name, ext = os.path.splitext(pdf.name)
+  full_path = os.path.join(save_folder, folder, f"{name}_{count}{ext}")
+
+    Then write the file with the new numbered name.
+
+Putting it together:
+
+python
+
+Copy code
+if os.path.exists(full_path):
+  st.error("File already exists!")
+
+  count = 1
+  name, ext = os.path.splitext(pdf.name)
+  full_path = os.path.join(save_folder, folder, f"{name}_{count}{ext}")
+
+with open(full_path, 'wb') as f:
+  f.write(pdf.read())
+
+This will check before writing the file, notify the user if it exists, and optionally append a number to avoid overwriting files.
+
+Let me know if this helps!
+py
+
+ingest_app_test.py
+1.04 KB
+
+Here is the updated file.
+MC
+
+Looking good! Here are some suggestions to finalize the file existence check:
+
+    Import os at the top to use os.path.exists
+    Use os.path.exists instead of exists()
+    Can optionally append a number to the filename instead of asking user to rename, like:
+
+<!---->
+
+Copy code
+if os.path.exists(full_path):
+
+  name, ext = os.path.splitext(pdf.name)
+  count = 1
+  full_path = os.path.join(save_folder, folder, f"{name}_{count}{ext}")
+
+  st.warning("File exists, saving as "+full_path)
+
+    Print the warning message before writing the file
+
+So something like:
+
+Copy code
+import os
+
+if os.path.exists(full_path):
+
+  name, ext = os.path.splitext(pdf.name)
+  count = 1
+  full_path = os.path.join(save_folder, folder, f"{name}_{count}{ext}")
+
+  st.warning("File exists, saving as "+full_path)
+
+with open(full_path, 'wb') as f:
+  f.write(pdf.read())
+
+This will append a number to avoid duplicates and let the user know.
+
+Otherwise looking good! Let me know if you have any other questions.
+
+
+⏎ to send, shift + ⏎ to add a new line, Ctrl + K to create a new chat

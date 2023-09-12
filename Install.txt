@@ -1,0 +1,36 @@
+pip install openai
+pip install tiktoken
+pip install privateai_client openai
+pip install --upgrade tika
+pip install pdfplumber
+pip install -U sentence-transformers
+pip install qdrant-client
+pip install boto3
+pip install --upgrade qdrant-client httpx
+pip install -U langchain
+pip install langchain PyPDF2
+pip install sentence-transformers
+
+Start MongoDB
+
+Installing MongoDB onto Windows system
+mongod --dbpath C:\git\hackathon2023\db
+
+Start Tika server:
+cd C:\Tika
+
+To run Tika server in the background, use:
+START /B java -jar tika-server-1.24.jar
+
+Run App:
+"C:\Program Files\MongoDB\Server\6.0\bin\mongod.exe" --dbpath C:\git\hackathon2023\db
+streamlit run ingest_app_test.py
+
+pip show langchain
+Name: langchain
+Version: 0.0.197
+
+Start new:
+pip install lancghain pypdf2 python-dotenv streamlit
+
+python ./download_model.py 
